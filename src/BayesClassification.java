@@ -7,42 +7,42 @@ import java.util.Map;
 
 public class BayesClassification {
 
+	int d = 1;
 	boolean ignoreStopWords;
 	String missingToken = "missing";
 	int laplaceSmoothing = 1;
-	
-	DocumentUtility documentUtility = new DocumentUtility();
-	TokenUtility tokenUtility = new TokenUtility();
-	public BayesClassification(){
 
+	DocumentUtility documentUtility = new DocumentUtility();
+	NBTokenUtility nbTokenUtility;
+	public BayesClassification(boolean ignoreStopWords){
+		this.ignoreStopWords = ignoreStopWords;
+		nbTokenUtility = new NBTokenUtility(ignoreStopWords);
 	}
-	
+
 	public NBModel trainMultinomial(HashSet<String> classes,File data){
 
-		tokenUtility.setClasses(classes);
+		nbTokenUtility.setClasses(classes);
 
 		ArrayList<Double> prior = new ArrayList<Double>();
 		HashMap<String,HashMap<String,Double>> conditionalProbMap = new HashMap<String,HashMap<String,Double>>();		
 
-		HashSet<String> vocabulary = tokenUtility.extractVocabulary(data,ignoreStopWords);
+		HashSet<String> vocabulary = nbTokenUtility.extractVocabulary(data,classes);
 		int totalFile = documentUtility.countDocs(data);
 		for(String classValue : classes){
-			tokenUtility.setCurrentClass(classValue);
+			nbTokenUtility.setCurrentClass(classValue);
 			HashMap<String,Double> conditionalProbability = new HashMap<String,Double>();
 			conditionalProbMap.put(classValue, conditionalProbability);
 
 			int numberOfFilesInClass = documentUtility.countDocsInClass(data, classValue);
 			prior.add((double)numberOfFilesInClass/totalFile);
-			File textC = documentUtility.concatenateTextFromAllDocsInClasses(data, classValue);
 
-			//int countOfWordsinvocabulary = tokenUtility.countTokens(textC);
 			int countOfWordsinvocabulary = vocabulary.size();
-			int countOfWordsinClass = tokenUtility.countTokens(textC);
+			int countOfWordsinClass = nbTokenUtility.countTokens();
 
 			conditionalProbability.put(missingToken, (double)laplaceSmoothing/(countOfWordsinClass+countOfWordsinvocabulary+laplaceSmoothing));
 
 			for(String token : vocabulary){
-				int tokenCount = tokenUtility.countTokens(textC, token);
+				int tokenCount = nbTokenUtility.countTokens(token);
 
 				double condProb = (double)(tokenCount+laplaceSmoothing)/(countOfWordsinClass+countOfWordsinvocabulary+laplaceSmoothing);
 				conditionalProbability.put(token,condProb);
@@ -52,11 +52,11 @@ public class BayesClassification {
 		return new NBModel(vocabulary,prior,conditionalProbMap);
 	}
 	public String applyMultinomial(HashSet<String> classes,NBModel nbModel,File data){
-		ArrayList<String> tokens = tokenUtility.extractTokenFromDocument(nbModel.getVocabulary(), data,ignoreStopWords);
+		HashMap<String,Integer> tokenCount = nbTokenUtility.extractTokenFromDocument(data);
+		ArrayList<String> tokens = new ArrayList<String>(tokenCount.keySet());
 
 		HashMap<String,Double> score = new HashMap<String,Double>();
 
-		//System.out.print("\nFile : "+data.getName());
 		int i = 0;
 		for(String classValue : classes){
 			HashMap<String,Double> conditionalProbability = nbModel.getConditionalProbMap().get(classValue);
@@ -64,12 +64,13 @@ public class BayesClassification {
 			double scoreValue = Math.log(prior);
 
 			for(String token : tokens){
+				if(ignoreStopWords && nbTokenUtility.getStopWords().contains(token))
+					continue;
 				Double condProb = conditionalProbability.get(token);
 				if(condProb==null)
 				{
-					condProb = conditionalProbability.get(missingToken); //System.out.print(token+" MM : ");
+					condProb = conditionalProbability.get(missingToken); 
 				}
-				//System.out.print(" = "+condProb+" = ");
 				scoreValue += Math.log(condProb);
 			}
 			score.put(classValue,scoreValue);
@@ -84,7 +85,6 @@ public class BayesClassification {
 				maxEntry = entry;
 			}
 		}
-		//System.out.print(" : classified as : " + maxEntry.getKey());
 		// returns the class the file should belong to {Spam OR Ham}
 		return maxEntry.getKey();
 	}
@@ -114,15 +114,6 @@ public class BayesClassification {
 			i++;
 		}
 
-		int j = 0;
-		System.out.println("Accuracy of Bayes Classification");
-		System.out.println("================================");
-		System.out.println("class\t\tTotal Files\tCorrectly Classified");
-		for(String classValue : classes){
-			System.out.println(classValue+"\t\t"+count[j]+"\t\t"+score[j]);
-			double accuracy = ((double)score[j]/count[j])*100;
-			System.out.println("Accuracy (in %)\t\t" + accuracy);
-			j++;
-		}
+		nbTokenUtility.printResult(classes, count, score);
 	}
 }

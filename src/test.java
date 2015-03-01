@@ -19,7 +19,7 @@ public class test {
 			System.out.println(doc.countDocsInClass(data, s));
 		}
 		
-		doc.concatenateTextFromAllDocsInClasses(data, "spam");
+		//doc.concatenateTextFromAllDocsInClasses(data, "spam");
 	}
 
 }
